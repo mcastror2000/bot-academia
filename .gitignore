@@ -131,3 +131,5 @@ dist
 
 # Replit debugger
 .breakpoints
+# ⚠️ Archivos sensibles que no deben subirse
+.env
