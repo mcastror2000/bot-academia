@@ -21,9 +21,18 @@ app.use(express.static('public'));
 
 const bot = new TelegramBot(TELEGRAM_TOKEN);
 
-const historialConsultas = {};
+const historialConsultas = {}; // Guarda el conteo por tema por IP
 const formulariosPendientes = {};
 const usuariosSaludados = new Set();
+
+function detectarTema(texto) {
+  const temas = [
+    'canto', 'teatro', 'clase de prueba', 'piano', 'guitarra', 'bajo', 'ukelele', 'violín',
+    'flauta', 'saxofón', 'violonchelo', 'batería', 'oratoria', 'inglés', 'francés'
+  ];
+  const lower = texto.toLowerCase();
+  return temas.find(t => lower.includes(t)) || 'otros';
+}
 
 function filtrarUrlsPorConsulta(userText) {
   const lowerText = userText.toLowerCase();
@@ -57,8 +66,7 @@ async function obtenerContenidoDeSitio(urls) {
         const { data } = await axios.get(url);
         const $ = cheerio.load(data);
         const texto = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 5000);
-        textoTotal += `Contenido de ${url}:
-` + texto + '\n\n';
+        textoTotal += `Contenido de ${url}:\n` + texto + '\n\n';
       } catch (err) {
         console.warn(`No se pudo acceder a ${url}`);
       }
@@ -76,9 +84,17 @@ app.post(`/bot${TELEGRAM_TOKEN}`, async (req, res) => {
 });
 
 app.post('/api/ask', async (req, res) => {
-  const { message } = req.body;
+  const { message, ip = req.ip } = req.body;
+  const tema = detectarTema(message);
+
+  if (!historialConsultas[ip]) historialConsultas[ip] = {};
+  if (!historialConsultas[ip][tema]) historialConsultas[ip][tema] = 0;
+  historialConsultas[ip][tema]++;
+
   const urls = filtrarUrlsPorConsulta(message);
   const contexto = await obtenerContenidoDeSitio(urls);
+
+  let respuestaFinal = '';
 
   try {
     const completion = await axios.post(
@@ -86,7 +102,7 @@ app.post('/api/ask', async (req, res) => {
       {
         model: 'gpt-3.5-turbo',
         messages: [
-          { role: 'system', content: 'Eres un asistente que responde exclusivamente con la información disponible en la página web de la Academia Nacional de Artes. Recuerda que la página indica que existe una clase de prueba de 60 minutos con valor promocional, válida para distintos instrumentos. Si se menciona esa clase, debes informarla claramente al usuario.' },
+          { role: 'system', content: 'Eres un asistente que responde exclusivamente con la información disponible en la página web de la Academia Nacional de Artes. Si el usuario demuestra interés claro en inscribirse, ser contactado, o conocer detalles como precios, horarios o formas de inscripción, puedes sugerirle completar el formulario de contacto ubicado en esta página. Usa un lenguaje cercano, claro y directo.' },
           { role: 'system', content: contexto },
           { role: 'user', content: message }
         ]
@@ -98,7 +114,19 @@ app.post('/api/ask', async (req, res) => {
         }
       }
     );
-    res.json({ reply: completion.data.choices[0].message.content });
+
+    respuestaFinal = completion.data.choices[0].message.content;
+
+    const deseaDetalles = message.toLowerCase().includes('precio') ||
+                          message.toLowerCase().includes('valor') ||
+                          message.toLowerCase().includes('horario') ||
+                          message.toLowerCase().includes('inscripción');
+
+    if (historialConsultas[ip][tema] >= 3 && deseaDetalles) {
+      respuestaFinal += '\n\n📬 Si deseas ser contactado personalmente, puedes dejar tus datos en el formulario disponible en esta página para recibir información personalizada. También puedes hacer clic en el botón "📨 Contactar" disponible más abajo.';
+    }
+
+    res.json({ reply: respuestaFinal });
   } catch (error) {
     console.error('Error con OpenAI (web):', error.response?.data || error.message);
     res.json({ reply: 'Lo siento, hubo un error al procesar tu consulta.' });
