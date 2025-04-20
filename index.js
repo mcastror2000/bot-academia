@@ -81,6 +81,42 @@ bot.on('message', async (msg) => {
 
   if (!userText || userText.startsWith('/')) return;
 
+  if (formulariosPendientes[chatId]) {
+    const datos = formulariosPendientes[chatId];
+    switch (datos.paso) {
+      case 'nombre':
+        datos.nombre = userText;
+        datos.paso = 'rut';
+        return bot.sendMessage(chatId, 'Gracias. ¿Cuál es tu RUT?');
+      case 'rut':
+        if (!/^[0-9kK.\-]+$/.test(userText)) return bot.sendMessage(chatId, '⚠️ El RUT no parece válido. Intenta nuevamente.');
+        datos.rut = userText;
+        datos.paso = 'correo';
+        return bot.sendMessage(chatId, '¿Cuál es tu correo electrónico?');
+      case 'correo':
+        if (!/^\S+@\S+\.\S+$/.test(userText)) return bot.sendMessage(chatId, '⚠️ El correo ingresado no parece válido. Intenta nuevamente.');
+        datos.correo = userText;
+        datos.paso = 'telefono';
+        return bot.sendMessage(chatId, '¿Cuál es tu número de teléfono (solo números)?');
+      case 'telefono':
+        if (!/^\d{7,15}$/.test(userText)) return bot.sendMessage(chatId, '⚠️ El número debe tener solo dígitos (mínimo 7, máximo 15).');
+        datos.telefono = userText;
+        datos.paso = 'preferencia';
+        return bot.sendMessage(chatId, '¿Prefieres que te contacten por WhatsApp? (Sí / No)');
+      case 'preferencia':
+        const respuesta = userText.toLowerCase();
+        if (!['sí', 'si', 'no'].includes(respuesta)) return bot.sendMessage(chatId, 'Por favor, responde solo "Sí" o "No".');
+        datos.preferencia = respuesta;
+        datos.paso = 'mensaje';
+        return bot.sendMessage(chatId, 'Por último, escribe tu mensaje o consulta.');
+      case 'mensaje':
+        datos.mensaje = userText;
+        await enviarCorreo(datos);
+        delete formulariosPendientes[chatId];
+        return bot.sendMessage(chatId, '✅ ¡Gracias! Tus datos fueron enviados correctamente. Pronto te contactaremos.');
+    }
+  }
+
   if (!usuariosSaludados.has(chatId)) {
     usuariosSaludados.add(chatId);
     await bot.sendMessage(chatId, '👋 ¡Hola! Soy tu asistente virtual. Cuéntame qué cursos te interesan y te ayudaré con gusto.');
@@ -140,3 +176,29 @@ bot.on('callback_query', async (query) => {
     await bot.sendMessage(chatId, '¡Perfecto! Comencemos. ¿Cuál es tu nombre completo?');
   }
 });
+
+async function enviarCorreo(datos) {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASS
+    }
+  });
+
+  const mensaje = `
+Nombre: ${datos.nombre}
+RUT: ${datos.rut}
+Correo: ${datos.correo}
+Teléfono: ${datos.telefono}
+¿Prefiere WhatsApp?: ${(datos.preferencia === 'sí' || datos.preferencia === 'si') ? 'Sí' : 'No'}
+Mensaje: ${datos.mensaje}
+  `;
+
+  await transporter.sendMail({
+    from: SMTP_USER,
+    to: DESTINO_CONTACTO,
+    subject: 'Nuevo contacto desde el bot de la Academia',
+    text: mensaje
+  });
+} 
