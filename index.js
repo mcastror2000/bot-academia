@@ -17,6 +17,7 @@ const PORT = process.env.PORT || 3000;
 
 const app = express();
 app.use(bodyParser.json());
+app.use(express.static('public'));
 
 const bot = new TelegramBot(TELEGRAM_TOKEN, { webHook: { port: PORT } });
 bot.setWebHook(`${WEBHOOK_URL}/bot${TELEGRAM_TOKEN}`);
@@ -75,6 +76,36 @@ app.post(`/bot${TELEGRAM_TOKEN}`, async (req, res) => {
   res.sendStatus(200);
 });
 
+app.post('/api/ask', async (req, res) => {
+  const { message } = req.body;
+  const urls = filtrarUrlsPorConsulta(message);
+  const contexto = await obtenerContenidoDeSitio(urls);
+
+  try {
+    const completion = await axios.post(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: 'Eres un asistente que responde exclusivamente con la información disponible en la página web de la Academia Nacional de Artes. Recuerda que la página indica que existe una clase de prueba de 60 minutos con valor promocional, válida para distintos instrumentos. Si se menciona esa clase, debes informarla claramente al usuario.' },
+          { role: 'system', content: contexto },
+          { role: 'user', content: message }
+        ]
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${OPENAI_API_KEY}`
+        }
+      }
+    );
+    res.json({ reply: completion.data.choices[0].message.content });
+  } catch (error) {
+    console.error('Error con OpenAI (web):', error.response?.data || error.message);
+    res.json({ reply: 'Lo siento, hubo un error al procesar tu consulta.' });
+  }
+});
+
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const userText = msg.text;
@@ -115,11 +146,6 @@ bot.on('message', async (msg) => {
         delete formulariosPendientes[chatId];
         return bot.sendMessage(chatId, '✅ ¡Gracias! Tus datos fueron enviados correctamente. Pronto te contactaremos.');
     }
-  }
-
-  if (!usuariosSaludados.has(chatId)) {
-    usuariosSaludados.add(chatId);
-    await bot.sendMessage(chatId, '👋 ¡Hola! Soy tu asistente virtual. Cuéntame qué cursos te interesan y te ayudaré con gusto.');
   }
 
   const urls = filtrarUrlsPorConsulta(userText);
@@ -163,7 +189,7 @@ bot.on('message', async (msg) => {
     );
     await bot.sendMessage(chatId, completion.data.choices[0].message.content);
   } catch (error) {
-    console.error('Error con OpenAI:', error.response?.data || error.message);
+    console.error('Error con OpenAI (telegram):', error.response?.data || error.message);
     bot.sendMessage(chatId, 'Lo siento, hubo un error al procesar tu consulta.');
   }
 });
@@ -201,4 +227,4 @@ Mensaje: ${datos.mensaje}
     subject: 'Nuevo contacto desde el bot de la Academia',
     text: mensaje
   });
-} 
+}
