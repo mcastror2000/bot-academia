@@ -123,7 +123,7 @@ app.post('/api/ask', async (req, res) => {
                           message.toLowerCase().includes('inscripción');
 
     if (historialConsultas[ip][tema] >= 3 && deseaDetalles) {
-      respuestaFinal += '\n\n📬 Si deseas ser contactado personalmente, puedes dejar tus datos en el formulario disponible en esta página para recibir información personalizada. También puedes hacer clic en el botón "📨 Contactar" disponible más abajo.';
+      respuestaFinal += '\n\n📬 Si deseas ser contactado personalmente, puedes dejar tus datos en el formulario disponible en esta página para recibir información personalizada. También puedes hacer clic en el botón "📨 Contactar" disponible más abajo. Si no deseas continuar, puedes pulsar "❌ Cancelar" para cerrar el formulario.';
     }
 
     res.json({ reply: respuestaFinal });
