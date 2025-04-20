@@ -57,7 +57,8 @@ async function obtenerContenidoDeSitio(urls) {
         const { data } = await axios.get(url);
         const $ = cheerio.load(data);
         const texto = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 5000);
-        textoTotal += `Contenido de ${url}:\n` + texto + '\n\n';
+        textoTotal += `Contenido de ${url}:
+` + texto + '\n\n';
       } catch (err) {
         console.warn(`No se pudo acceder a ${url}`);
       }
@@ -98,7 +99,11 @@ bot.on('message', async (msg) => {
   ];
 
   if (intencionContacto.some(frase => userText.toLowerCase().includes(frase))) {
-    await bot.sendMessage(chatId, '📬 Si deseas ser contactado personalmente, por favor comparte tu nombre completo, correo y teléfono para que podamos ayudarte. ¿Deseas continuar?');
+    await bot.sendMessage(chatId, '📬 Si deseas ser contactado personalmente, por favor presiona el botón a continuación para iniciar el formulario.', {
+      reply_markup: {
+        inline_keyboard: [[{ text: '📨 Iniciar contacto', callback_data: 'formulario_contacto' }]]
+      }
+    });
     return;
   }
 
@@ -124,5 +129,14 @@ bot.on('message', async (msg) => {
   } catch (error) {
     console.error('Error con OpenAI:', error.response?.data || error.message);
     bot.sendMessage(chatId, 'Lo siento, hubo un error al procesar tu consulta.');
+  }
+});
+
+bot.on('callback_query', async (query) => {
+  const chatId = query.message.chat.id;
+
+  if (query.data === 'formulario_contacto') {
+    formulariosPendientes[chatId] = { paso: 'nombre' };
+    await bot.sendMessage(chatId, '¡Perfecto! Comencemos. ¿Cuál es tu nombre completo?');
   }
 });
