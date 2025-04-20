@@ -227,4 +227,7 @@ Mensaje: ${datos.mensaje}
     subject: 'Nuevo contacto desde el bot de la Academia',
     text: mensaje
   });
+  app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/public/index.html');
+  });
 }
