@@ -27,22 +27,9 @@ const usuariosSaludados = new Set();
 
 function filtrarUrlsPorConsulta(userText) {
   const lowerText = userText.toLowerCase();
-  if (lowerText.includes('canto')) {
-    return [
-      'https://www.academianacionaldeartes.cl/clases-de-canto',
-      'https://www.academianacionaldeartes.cl/curso-de-formacion-musical'
-    ];
-  }
-  if (lowerText.includes('teatro')) {
-    return [
-      'https://www.academianacionaldeartes.cl/talleres-de-teatro',
-      'https://www.academianacionaldeartes.cl/taller-de-iniciacion-en-teatro',
-      'https://www.academianacionaldeartes.cl/preuniversitario-teatral'
-    ];
-  }
-  if (lowerText.includes('clase de prueba') || lowerText.includes('sesión de prueba') || lowerText.includes('clase gratis')) {
-    return ['https://www.academianacionaldeartes.cl/clase-de-prueba'];
-  }
+  if (lowerText.includes('canto')) return ['https://www.academianacionaldeartes.cl/clases-de-canto'];
+  if (lowerText.includes('teatro')) return ['https://www.academianacionaldeartes.cl/talleres-de-teatro'];
+  if (lowerText.includes('clase de prueba') || lowerText.includes('sesión de prueba')) return ['https://www.academianacionaldeartes.cl/clase-de-prueba'];
   if (lowerText.includes('piano')) return ['https://www.academianacionaldeartes.cl/clases-de-piano'];
   if (lowerText.includes('guitarra')) return ['https://www.academianacionaldeartes.cl/clases-de-guitarra'];
   if (lowerText.includes('bajo')) return ['https://www.academianacionaldeartes.cl/clases-de-bajo'];
@@ -55,7 +42,6 @@ function filtrarUrlsPorConsulta(userText) {
   if (lowerText.includes('oratoria')) return ['https://www.academianacionaldeartes.cl/cursos-de-oratoria'];
   if (lowerText.includes('inglés') || lowerText.includes('ingles')) return ['https://www.academianacionaldeartes.cl/cursos-de-ingles'];
   if (lowerText.includes('francés') || lowerText.includes('frances')) return ['https://www.academianacionaldeartes.cl/cursos-de-frances'];
-
   return [
     'https://www.academianacionaldeartes.cl/cursos-de-musica',
     'https://www.academianacionaldeartes.cl/clase-de-prueba',
@@ -70,100 +56,37 @@ async function obtenerContenidoDeSitio(urls) {
       try {
         const { data } = await axios.get(url);
         const $ = cheerio.load(data);
-        const texto = $('main').text().replace(/\s+/g, ' ').trim().slice(0, 1500);
+        const texto = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 2000);
         textoTotal += `Contenido de ${url}:\n` + texto + '\n\n';
-      } catch {
+      } catch (err) {
         console.warn(`No se pudo acceder a ${url}`);
       }
     }
     return textoTotal.slice(0, 12000);
-  } catch {
+  } catch (error) {
+    console.error('Error al obtener el contenido del sitio:', error);
     return 'No se pudo obtener la información actualizada del sitio.';
   }
 }
 
-async function enviarCorreo(datos) {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS
-    }
-  });
-
-  const mailOptions = {
-    from: SMTP_USER,
-    to: DESTINO_CONTACTO,
-    subject: 'Nuevo mensaje de contacto desde el bot',
-    text: `Nombre: ${datos.nombre}
-RUT: ${datos.rut}
-Correo: ${datos.correo}
-Teléfono: ${datos.telefono}
-¿Prefiere WhatsApp?: ${['sí', 'si'].includes(datos.preferencia) ? 'Sí' : 'No'}
-Mensaje: ${datos.mensaje}`
-  };
-
-  await transporter.sendMail(mailOptions);
-}
+app.post(`/bot${TELEGRAM_TOKEN}`, async (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
 
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const userText = msg.text;
 
-  if (msg.text && !msg.text.startsWith('/') && !usuariosSaludados.has(chatId)) {
+  if (!userText || userText.startsWith('/')) return;
+
+  if (!usuariosSaludados.has(chatId)) {
     usuariosSaludados.add(chatId);
-    const opciones = {
-      reply_markup: {
-        inline_keyboard: [[
-          { text: '📬 Quiero ser contactado', callback_data: 'iniciar_contacto' }
-        ]]
-      }
-    };
-    bot.sendMessage(chatId, '👋 ¡Hola! Soy tu asistente virtual. Cuéntame qué cursos te interesan y te ayudaré con gusto. Si deseas que te contacten directamente, pulsa el botón a continuación.', opciones);
+    await bot.sendMessage(chatId, '👋 ¡Hola! Soy tu asistente virtual. Cuéntame qué cursos te interesan y te ayudaré con gusto.');
   }
 
-  if (userText.startsWith('/')) return;
-
-  if (formulariosPendientes[chatId]) {
-    const datos = formulariosPendientes[chatId];
-    switch (datos.paso) {
-      case 'nombre':
-        datos.nombre = userText;
-        datos.paso = 'rut';
-        return bot.sendMessage(chatId, 'Gracias. Ahora dime tu RUT.');
-      case 'rut':
-        if (!/^[0-9kK.\-]+$/.test(userText)) return bot.sendMessage(chatId, '⚠️ El RUT ingresado no parece válido. Intenta nuevamente.');
-        datos.rut = userText;
-        datos.paso = 'correo';
-        return bot.sendMessage(chatId, 'Perfecto. ¿Cuál es tu correo electrónico?');
-      case 'correo':
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userText)) return bot.sendMessage(chatId, '⚠️ El correo ingresado no parece válido. Intenta nuevamente.');
-        datos.correo = userText;
-        datos.paso = 'telefono';
-        return bot.sendMessage(chatId, '¿Cuál es tu número de teléfono (solo números)?');
-      case 'telefono':
-        if (!/^\d{7,15}$/.test(userText)) return bot.sendMessage(chatId, '⚠️ El número debe tener solo dígitos (mínimo 7, máximo 15). Intenta nuevamente.');
-        datos.telefono = userText;
-        datos.paso = 'preferencia';
-        return bot.sendMessage(chatId, '¿Prefieres que te contacten por WhatsApp? (Sí / No)');
-      case 'preferencia':
-        if (!['sí', 'si', 'no'].includes(userText.toLowerCase())) return bot.sendMessage(chatId, 'Por favor, responde solo "Sí" o "No".');
-        datos.preferencia = userText.toLowerCase();
-        datos.paso = 'mensaje';
-        return bot.sendMessage(chatId, 'Por último, escribe tu mensaje o consulta.');
-      case 'mensaje':
-        datos.mensaje = userText;
-        await enviarCorreo(datos);
-        delete formulariosPendientes[chatId];
-        return bot.sendMessage(chatId, '¡Gracias! Tus datos han sido enviados correctamente. Pronto te contactaremos.');
-    }
-  }
-
-  if (!historialConsultas[chatId]) historialConsultas[chatId] = 0;
-  historialConsultas[chatId]++;
-
-  const urlsRelevantes = filtrarUrlsPorConsulta(userText);
-  const contexto = await obtenerContenidoDeSitio(urlsRelevantes);
+  const urls = filtrarUrlsPorConsulta(userText);
+  const contexto = await obtenerContenidoDeSitio(urls);
 
   try {
     const completion = await axios.post(
@@ -171,7 +94,7 @@ bot.on('message', async (msg) => {
       {
         model: 'gpt-3.5-turbo',
         messages: [
-          { role: 'system', content: 'Eres un asistente experto en orientar a estudiantes sobre los cursos y servicios ofrecidos por la Academia Nacional de Artes. Usa solo la información proporcionada.' },
+          { role: 'system', content: 'Eres un asistente que responde solo con la información de la Academia Nacional de Artes.' },
           { role: 'system', content: contexto },
           { role: 'user', content: userText }
         ]
@@ -183,44 +106,9 @@ bot.on('message', async (msg) => {
         }
       }
     );
-
-    let respuesta = completion.data.choices[0].message.content;
-    const deseaDetalles = userText.toLowerCase().match(/precio|valor|horario|clase|inscripción/);
-
-    if (historialConsultas[chatId] >= 3 && deseaDetalles) {
-      respuesta += '\n\n👉 Si deseas concretar tu participación o recibir más información personalizada, puedes completar el formulario de contacto con /quiero_contacto o pulsar "📬 Quiero ser contactado" con el comando /inicio.';
-    }
-
-    await bot.sendMessage(chatId, respuesta);
+    await bot.sendMessage(chatId, completion.data.choices[0].message.content);
   } catch (error) {
-    console.error('Error al consultar OpenAI:', error.response?.data || error.message);
-    await bot.sendMessage(chatId, 'Lo siento, hubo un error al generar la respuesta.');
-  }
-});
-
-bot.onText(/\/quiero_contacto/, (msg) => {
-  const chatId = msg.chat.id;
-  formulariosPendientes[chatId] = { paso: 'nombre' };
-  bot.sendMessage(chatId, 'Por favor, indícame tu nombre completo.');
-});
-
-bot.onText(/\/inicio/, (msg) => {
-  const chatId = msg.chat.id;
-  const opciones = {
-    reply_markup: {
-      inline_keyboard: [[
-        { text: '📬 Quiero ser contactado', callback_data: 'iniciar_contacto' }
-      ]]
-    }
-  };
-  bot.sendMessage(chatId, '¡Hola! ¿En qué puedo ayudarte hoy?', opciones);
-});
-
-bot.on('callback_query', async (callbackQuery) => {
-  const chatId = callbackQuery.message.chat.id;
-  const action = callbackQuery.data;
-  if (action === 'iniciar_contacto') {
-    formulariosPendientes[chatId] = { paso: 'nombre' };
-    bot.sendMessage(chatId, 'Perfecto. Comencemos con tu nombre completo.');
+    console.error('Error con OpenAI:', error.response?.data || error.message);
+    bot.sendMessage(chatId, 'Lo siento, hubo un error al procesar tu consulta.');
   }
 });
