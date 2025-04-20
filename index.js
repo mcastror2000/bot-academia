@@ -44,6 +44,14 @@ function filtrarUrlsPorConsulta(userText) {
   if (lowerText.includes('guitarra')) return ['https://www.academianacionaldeartes.cl/clases-de-guitarra'];
   if (lowerText.includes('bajo')) return ['https://www.academianacionaldeartes.cl/clases-de-bajo'];
   if (lowerText.includes('ukelele')) return ['https://www.academianacionaldeartes.cl/clases-de-ukelele'];
+  if (lowerText.includes('violín') || lowerText.includes('violin')) return ['https://www.academianacionaldeartes.cl/clases-de-violin'];
+  if (lowerText.includes('flauta')) return ['https://www.academianacionaldeartes.cl/clases-de-flauta-traversa'];
+  if (lowerText.includes('saxofón') || lowerText.includes('saxofon')) return ['https://www.academianacionaldeartes.cl/clases-de-saxofon'];
+  if (lowerText.includes('violonchelo')) return ['https://www.academianacionaldeartes.cl/clases-de-violonchelo'];
+  if (lowerText.includes('batería') || lowerText.includes('bateria')) return ['https://www.academianacionaldeartes.cl/clases-de-bateria'];
+  if (lowerText.includes('oratoria')) return ['https://www.academianacionaldeartes.cl/cursos-de-oratoria'];
+  if (lowerText.includes('inglés') || lowerText.includes('ingles')) return ['https://www.academianacionaldeartes.cl/cursos-de-ingles'];
+  if (lowerText.includes('francés') || lowerText.includes('frances')) return ['https://www.academianacionaldeartes.cl/cursos-de-frances'];
 
   return [
     'https://www.academianacionaldeartes.cl/cursos-de-musica',
@@ -58,27 +66,47 @@ async function obtenerContenidoDeSitio(urls) {
       try {
         const { data } = await axios.get(url);
         const $ = cheerio.load(data);
-        const texto = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 2000);
-        textoTotal += `Contenido de ${url}:
-` + texto + '\n\n';
-      } catch (err) {
+        const texto = $('main').text().replace(/\s+/g, ' ').trim().slice(0, 1500);
+        textoTotal += `Contenido de ${url}:\n` + texto + '\n\n';
+      } catch {
         console.warn(`No se pudo acceder a ${url}`);
       }
     }
     return textoTotal.slice(0, 12000);
-  } catch (error) {
-    console.error('Error al obtener el contenido del sitio:', error);
+  } catch {
     return 'No se pudo obtener la información actualizada del sitio.';
   }
+}
+
+async function enviarCorreo(datos) {
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASS
+    }
+  });
+
+  const mailOptions = {
+    from: SMTP_USER,
+    to: DESTINO_CONTACTO,
+    subject: 'Nuevo mensaje de contacto desde el bot',
+    text: `Nombre: ${datos.nombre}
+RUT: ${datos.rut}
+Correo: ${datos.correo}
+Teléfono: ${datos.telefono}
+¿Prefiere WhatsApp?: ${['sí', 'si'].includes(datos.preferencia) ? 'Sí' : 'No'}
+Mensaje: ${datos.mensaje}`
+  };
+
+  await transporter.sendMail(mailOptions);
 }
 
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const userText = msg.text;
 
-  if (userText.startsWith('/')) return;
-
-  if (!usuariosSaludados.has(chatId)) {
+  if (msg.text && !msg.text.startsWith('/') && !usuariosSaludados.has(chatId)) {
     usuariosSaludados.add(chatId);
     const opciones = {
       reply_markup: {
@@ -90,66 +118,41 @@ bot.on('message', async (msg) => {
     bot.sendMessage(chatId, '👋 ¡Hola! Soy tu asistente virtual. Cuéntame qué cursos te interesan y te ayudaré con gusto. Si deseas que te contacten directamente, pulsa el botón a continuación.', opciones);
   }
 
+  if (userText.startsWith('/')) return;
+
   if (formulariosPendientes[chatId]) {
     const datos = formulariosPendientes[chatId];
     switch (datos.paso) {
       case 'nombre':
         datos.nombre = userText;
         datos.paso = 'rut';
-        bot.sendMessage(chatId, 'Gracias. Ahora dime tu RUT.');
-        break;
-      case 'rut': {
-        const rutValido = /^[0-9kK.\-]+$/.test(userText);
-        if (!rutValido) {
-          bot.sendMessage(chatId, '⚠️ El RUT ingresado no parece válido. Intenta nuevamente.');
-          return;
-        }
+        return bot.sendMessage(chatId, 'Gracias. Ahora dime tu RUT.');
+      case 'rut':
+        if (!/^[0-9kK.\-]+$/.test(userText)) return bot.sendMessage(chatId, '⚠️ El RUT ingresado no parece válido. Intenta nuevamente.');
         datos.rut = userText;
         datos.paso = 'correo';
-        bot.sendMessage(chatId, 'Perfecto. ¿Cuál es tu correo electrónico?');
-        break;
-      }
-      case 'correo': {
-        const correoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userText);
-        if (!correoValido) {
-          bot.sendMessage(chatId, '⚠️ El correo ingresado no parece válido. Intenta nuevamente.');
-          return;
-        }
+        return bot.sendMessage(chatId, 'Perfecto. ¿Cuál es tu correo electrónico?');
+      case 'correo':
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userText)) return bot.sendMessage(chatId, '⚠️ El correo ingresado no parece válido. Intenta nuevamente.');
         datos.correo = userText;
         datos.paso = 'telefono';
-        bot.sendMessage(chatId, '¿Cuál es tu número de teléfono (solo números)?');
-        break;
-      }
-      case 'telefono': {
-        const telefonoValido = /^\d{7,15}$/.test(userText);
-        if (!telefonoValido) {
-          bot.sendMessage(chatId, '⚠️ El número debe tener solo dígitos (mínimo 7, máximo 15). Intenta nuevamente.');
-          return;
-        }
+        return bot.sendMessage(chatId, '¿Cuál es tu número de teléfono (solo números)?');
+      case 'telefono':
+        if (!/^\d{7,15}$/.test(userText)) return bot.sendMessage(chatId, '⚠️ El número debe tener solo dígitos (mínimo 7, máximo 15). Intenta nuevamente.');
         datos.telefono = userText;
         datos.paso = 'preferencia';
-        bot.sendMessage(chatId, '¿Prefieres que te contacten por WhatsApp? (Sí / No)');
-        break;
-      }
-      case 'preferencia': {
-        const texto = userText.toLowerCase();
-        if (texto !== 'sí' && texto !== 'no' && texto !== 'si') {
-          bot.sendMessage(chatId, 'Por favor, responde solo "Sí" o "No".');
-          return;
-        }
-        datos.preferencia = texto;
+        return bot.sendMessage(chatId, '¿Prefieres que te contacten por WhatsApp? (Sí / No)');
+      case 'preferencia':
+        if (!['sí', 'si', 'no'].includes(userText.toLowerCase())) return bot.sendMessage(chatId, 'Por favor, responde solo "Sí" o "No".');
+        datos.preferencia = userText.toLowerCase();
         datos.paso = 'mensaje';
-        bot.sendMessage(chatId, 'Por último, escribe tu mensaje o consulta.');
-        break;
-      }
+        return bot.sendMessage(chatId, 'Por último, escribe tu mensaje o consulta.');
       case 'mensaje':
         datos.mensaje = userText;
         await enviarCorreo(datos);
         delete formulariosPendientes[chatId];
-        bot.sendMessage(chatId, '¡Gracias! Tus datos han sido enviados correctamente. Pronto te contactaremos.');
-        break;
+        return bot.sendMessage(chatId, '¡Gracias! Tus datos han sido enviados correctamente. Pronto te contactaremos.');
     }
-    return;
   }
 
   if (!historialConsultas[chatId]) historialConsultas[chatId] = 0;
@@ -178,8 +181,7 @@ bot.on('message', async (msg) => {
     );
 
     let respuesta = completion.data.choices[0].message.content;
-    const textoDetallado = userText.toLowerCase();
-    const deseaDetalles = textoDetallado.includes('precio') || textoDetallado.includes('valor') || textoDetallado.includes('horario') || textoDetallado.includes('clase') || textoDetallado.includes('inscripción');
+    const deseaDetalles = userText.toLowerCase().match(/precio|valor|horario|clase|inscripción/);
 
     if (historialConsultas[chatId] >= 3 && deseaDetalles) {
       respuesta += '\n\n👉 Si deseas concretar tu participación o recibir más información personalizada, puedes completar el formulario de contacto con /quiero_contacto o pulsar "📬 Quiero ser contactado" con el comando /inicio.';
@@ -218,27 +220,3 @@ bot.on('callback_query', async (callbackQuery) => {
     bot.sendMessage(chatId, 'Perfecto. Comencemos con tu nombre completo.');
   }
 });
-
-async function enviarCorreo(datos) {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS
-    }
-  });
-
-  const mailOptions = {
-    from: SMTP_USER,
-    to: DESTINO_CONTACTO,
-    subject: 'Nuevo mensaje de contacto desde el bot',
-    text: `Nombre: ${datos.nombre}
-RUT: ${datos.rut}
-Correo: ${datos.correo}
-Teléfono: ${datos.telefono}
-¿Prefiere WhatsApp?: ${(datos.preferencia === 'sí' || datos.preferencia === 'si') ? 'Sí' : 'No'}
-Mensaje: ${datos.mensaje}`
-  };
-
-  await transporter.sendMail(mailOptions);
-}
