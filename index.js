@@ -19,8 +19,7 @@ const app = express();
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
-const bot = new TelegramBot(TELEGRAM_TOKEN, { webHook: { port: PORT } });
-bot.setWebHook(`${WEBHOOK_URL}/bot${TELEGRAM_TOKEN}`);
+const bot = new TelegramBot(TELEGRAM_TOKEN);
 
 const historialConsultas = {};
 const formulariosPendientes = {};
@@ -106,100 +105,19 @@ app.post('/api/ask', async (req, res) => {
   }
 });
 
-bot.on('message', async (msg) => {
-  const chatId = msg.chat.id;
-  const userText = msg.text;
+app.post('/api/contacto', async (req, res) => {
+  const datos = req.body;
 
-  if (!userText || userText.startsWith('/')) return;
-
-  if (formulariosPendientes[chatId]) {
-    const datos = formulariosPendientes[chatId];
-    switch (datos.paso) {
-      case 'nombre':
-        datos.nombre = userText;
-        datos.paso = 'rut';
-        return bot.sendMessage(chatId, 'Gracias. ¿Cuál es tu RUT?');
-      case 'rut':
-        if (!/^[0-9kK.\-]+$/.test(userText)) return bot.sendMessage(chatId, '⚠️ El RUT no parece válido. Intenta nuevamente.');
-        datos.rut = userText;
-        datos.paso = 'correo';
-        return bot.sendMessage(chatId, '¿Cuál es tu correo electrónico?');
-      case 'correo':
-        if (!/^\S+@\S+\.\S+$/.test(userText)) return bot.sendMessage(chatId, '⚠️ El correo ingresado no parece válido. Intenta nuevamente.');
-        datos.correo = userText;
-        datos.paso = 'telefono';
-        return bot.sendMessage(chatId, '¿Cuál es tu número de teléfono (solo números)?');
-      case 'telefono':
-        if (!/^\d{7,15}$/.test(userText)) return bot.sendMessage(chatId, '⚠️ El número debe tener solo dígitos (mínimo 7, máximo 15).');
-        datos.telefono = userText;
-        datos.paso = 'preferencia';
-        return bot.sendMessage(chatId, '¿Prefieres que te contacten por WhatsApp? (Sí / No)');
-      case 'preferencia':
-        const respuesta = userText.toLowerCase();
-        if (!['sí', 'si', 'no'].includes(respuesta)) return bot.sendMessage(chatId, 'Por favor, responde solo "Sí" o "No".');
-        datos.preferencia = respuesta;
-        datos.paso = 'mensaje';
-        return bot.sendMessage(chatId, 'Por último, escribe tu mensaje o consulta.');
-      case 'mensaje':
-        datos.mensaje = userText;
-        await enviarCorreo(datos);
-        delete formulariosPendientes[chatId];
-        return bot.sendMessage(chatId, '✅ ¡Gracias! Tus datos fueron enviados correctamente. Pronto te contactaremos.');
-    }
-  }
-
-  const urls = filtrarUrlsPorConsulta(userText);
-  const contexto = await obtenerContenidoDeSitio(urls);
-
-  const intencionContacto = [
-    'quiero inscribirme',
-    'quiero que me contacten',
-    'quiero hablar con una persona',
-    'me pueden llamar',
-    'quiero inscribirme ya',
-    'necesito ayuda para inscribirme'
-  ];
-
-  if (intencionContacto.some(frase => userText.toLowerCase().includes(frase))) {
-    await bot.sendMessage(chatId, '📬 Si deseas ser contactado personalmente, por favor presiona el botón a continuación para iniciar el formulario.', {
-      reply_markup: {
-        inline_keyboard: [[{ text: '📨 Iniciar contacto', callback_data: 'formulario_contacto' }]]
-      }
-    });
-    return;
+  if (!datos.nombre || !datos.rut || !datos.correo || !datos.telefono || !datos.preferencia || !datos.mensaje) {
+    return res.status(400).json({ ok: false, message: 'Faltan campos requeridos' });
   }
 
   try {
-    const completion = await axios.post(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        model: 'gpt-3.5-turbo',
-        messages: [
-          { role: 'system', content: 'Eres un asistente que responde exclusivamente con la información disponible en la página web de la Academia Nacional de Artes. Recuerda que la página indica que existe una clase de prueba de 60 minutos con valor promocional, válida para distintos instrumentos. Si se menciona esa clase, debes informarla claramente al usuario.' },
-          { role: 'system', content: contexto },
-          { role: 'user', content: userText }
-        ]
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${OPENAI_API_KEY}`
-        }
-      }
-    );
-    await bot.sendMessage(chatId, completion.data.choices[0].message.content);
+    await enviarCorreo(datos);
+    res.json({ ok: true, message: 'Datos enviados correctamente' });
   } catch (error) {
-    console.error('Error con OpenAI (telegram):', error.response?.data || error.message);
-    bot.sendMessage(chatId, 'Lo siento, hubo un error al procesar tu consulta.');
-  }
-});
-
-bot.on('callback_query', async (query) => {
-  const chatId = query.message.chat.id;
-
-  if (query.data === 'formulario_contacto') {
-    formulariosPendientes[chatId] = { paso: 'nombre' };
-    await bot.sendMessage(chatId, '¡Perfecto! Comencemos. ¿Cuál es tu nombre completo?');
+    console.error('Error al enviar el correo desde el formulario web:', error.message);
+    res.status(500).json({ ok: false, message: 'Hubo un error al enviar el correo' });
   }
 });
 
@@ -227,9 +145,13 @@ Mensaje: ${datos.mensaje}
     subject: 'Nuevo contacto desde el bot de la Academia',
     text: mensaje
   });
-  app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/public/index.html');
-  });
-  app.use(express.static('public'));
-  
 }
+
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/public/index.html');
+});
+
+app.listen(PORT, () => {
+  console.log(`Servidor corriendo en puerto ${PORT}`);
+  bot.setWebHook(`${WEBHOOK_URL}/bot${TELEGRAM_TOKEN}`);
+});
