@@ -40,6 +40,9 @@ function filtrarUrlsPorConsulta(userText) {
       'https://www.academianacionaldeartes.cl/preuniversitario-teatral'
     ];
   }
+  if (lowerText.includes('clase de prueba') || lowerText.includes('sesión de prueba') || lowerText.includes('clase gratis')) {
+    return ['https://www.academianacionaldeartes.cl/clase-de-prueba'];
+  }
   if (lowerText.includes('piano')) return ['https://www.academianacionaldeartes.cl/clases-de-piano'];
   if (lowerText.includes('guitarra')) return ['https://www.academianacionaldeartes.cl/clases-de-guitarra'];
   if (lowerText.includes('bajo')) return ['https://www.academianacionaldeartes.cl/clases-de-bajo'];
@@ -55,6 +58,7 @@ function filtrarUrlsPorConsulta(userText) {
 
   return [
     'https://www.academianacionaldeartes.cl/cursos-de-musica',
+    'https://www.academianacionaldeartes.cl/clase-de-prueba',
     'https://www.academianacionaldeartes.cl'
   ];
 }
