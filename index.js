@@ -1,5 +1,7 @@
 // index.js
 require('dotenv').config();
+const express = require('express');
+const bodyParser = require('body-parser');
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const cheerio = require('cheerio');
@@ -10,8 +12,14 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const DESTINO_CONTACTO = process.env.DESTINO_CONTACTO;
+const WEBHOOK_URL = process.env.WEBHOOK_URL;
+const PORT = process.env.PORT || 3000;
 
-const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+const app = express();
+app.use(bodyParser.json());
+
+const bot = new TelegramBot(TELEGRAM_TOKEN, { webHook: { port: PORT } });
+bot.setWebHook(`${WEBHOOK_URL}/bot${TELEGRAM_TOKEN}`);
 
 const historialConsultas = {};
 const formulariosPendientes = {};
@@ -19,7 +27,6 @@ const usuariosSaludados = new Set();
 
 function filtrarUrlsPorConsulta(userText) {
   const lowerText = userText.toLowerCase();
-
   if (lowerText.includes('canto')) {
     return [
       'https://www.academianacionaldeartes.cl/clases-de-canto',
@@ -33,18 +40,10 @@ function filtrarUrlsPorConsulta(userText) {
       'https://www.academianacionaldeartes.cl/preuniversitario-teatral'
     ];
   }
-  if (lowerText.includes('piano')) {
-    return ['https://www.academianacionaldeartes.cl/clases-de-piano'];
-  }
-  if (lowerText.includes('guitarra')) {
-    return ['https://www.academianacionaldeartes.cl/clases-de-guitarra'];
-  }
-  if (lowerText.includes('bajo')) {
-    return ['https://www.academianacionaldeartes.cl/clases-de-bajo'];
-  }
-  if (lowerText.includes('ukelele')) {
-    return ['https://www.academianacionaldeartes.cl/clases-de-ukelele'];
-  }
+  if (lowerText.includes('piano')) return ['https://www.academianacionaldeartes.cl/clases-de-piano'];
+  if (lowerText.includes('guitarra')) return ['https://www.academianacionaldeartes.cl/clases-de-guitarra'];
+  if (lowerText.includes('bajo')) return ['https://www.academianacionaldeartes.cl/clases-de-bajo'];
+  if (lowerText.includes('ukelele')) return ['https://www.academianacionaldeartes.cl/clases-de-ukelele'];
 
   return [
     'https://www.academianacionaldeartes.cl/cursos-de-musica',
@@ -78,9 +77,7 @@ bot.on('new_chat_members', (msg) => {
   const chatId = msg.chat.id;
   const opciones = {
     reply_markup: {
-      inline_keyboard: [[
-        { text: '📬 Quiero ser contactado', callback_data: 'iniciar_contacto' }
-      ]]
+      inline_keyboard: [[{ text: '📬 Quiero ser contactado', callback_data: 'iniciar_contacto' }]]
     }
   };
   bot.sendMessage(chatId, bienvenida, opciones);
@@ -96,9 +93,7 @@ bot.onText(/\/inicio/, (msg) => {
   const chatId = msg.chat.id;
   const opciones = {
     reply_markup: {
-      inline_keyboard: [[
-        { text: '📬 Quiero ser contactado', callback_data: 'iniciar_contacto' }
-      ]]
+      inline_keyboard: [[{ text: '📬 Quiero ser contactado', callback_data: 'iniciar_contacto' }]]
     }
   };
   bot.sendMessage(chatId, '¡Hola! ¿En qué puedo ayudarte hoy?', opciones);
@@ -106,9 +101,7 @@ bot.onText(/\/inicio/, (msg) => {
 
 bot.on('callback_query', async (callbackQuery) => {
   const chatId = callbackQuery.message.chat.id;
-  const action = callbackQuery.data;
-
-  if (action === 'iniciar_contacto') {
+  if (callbackQuery.data === 'iniciar_contacto') {
     formulariosPendientes[chatId] = { paso: 'nombre' };
     bot.sendMessage(chatId, 'Perfecto. Comencemos con tu nombre completo.');
   }
@@ -122,9 +115,7 @@ bot.on('message', async (msg) => {
     usuariosSaludados.add(chatId);
     const opciones = {
       reply_markup: {
-        inline_keyboard: [[
-          { text: '📬 Quiero ser contactado', callback_data: 'iniciar_contacto' }
-        ]]
+        inline_keyboard: [[{ text: '📬 Quiero ser contactado', callback_data: 'iniciar_contacto' }]]
       }
     };
     bot.sendMessage(chatId, '👋 ¡Hola! Soy tu asistente virtual. Cuéntame qué cursos te interesan y te ayudaré con gusto. Si deseas que te contacten directamente, pulsa el botón a continuación.', opciones);
@@ -141,8 +132,7 @@ bot.on('message', async (msg) => {
         bot.sendMessage(chatId, 'Gracias. Ahora dime tu RUT.');
         break;
       case 'rut': {
-        const rutValido = /^[0-9kK.\-]+$/.test(userText);
-        if (!rutValido) {
+        if (!/^[0-9kK.\-]+$/.test(userText)) {
           bot.sendMessage(chatId, '⚠️ El RUT ingresado no parece válido. Intenta nuevamente.');
           return;
         }
@@ -152,8 +142,7 @@ bot.on('message', async (msg) => {
         break;
       }
       case 'correo': {
-        const correoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userText);
-        if (!correoValido) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userText)) {
           bot.sendMessage(chatId, '⚠️ El correo ingresado no parece válido. Intenta nuevamente.');
           return;
         }
@@ -163,8 +152,7 @@ bot.on('message', async (msg) => {
         break;
       }
       case 'telefono': {
-        const telefonoValido = /^\d{7,15}$/.test(userText);
-        if (!telefonoValido) {
+        if (!/^\d{7,15}$/.test(userText)) {
           bot.sendMessage(chatId, '⚠️ El número debe tener solo dígitos (mínimo 7, máximo 15). Intenta nuevamente.');
           return;
         }
@@ -175,7 +163,7 @@ bot.on('message', async (msg) => {
       }
       case 'preferencia': {
         const texto = userText.toLowerCase();
-        if (texto !== 'sí' && texto !== 'no' && texto !== 'si') {
+        if (!['sí', 'si', 'no'].includes(texto)) {
           bot.sendMessage(chatId, 'Por favor, responde solo "Sí" o "No".');
           return;
         }
@@ -220,10 +208,8 @@ bot.on('message', async (msg) => {
     );
 
     let respuesta = completion.data.choices[0].message.content;
-
     const textoDetallado = userText.toLowerCase();
-    const deseaDetalles = textoDetallado.includes('precio') || textoDetallado.includes('valor') || textoDetallado.includes('horario') || textoDetallado.includes('clase') || textoDetallado.includes('inscripción');
-
+    const deseaDetalles = ['precio', 'valor', 'horario', 'clase', 'inscripción'].some(p => textoDetallado.includes(p));
     if (historialConsultas[chatId] >= 3 && deseaDetalles) {
       respuesta += '\n\n👉 Si deseas concretar tu participación o recibir más información personalizada, puedes completar el formulario de contacto con /quiero_contacto o pulsar "📬 Quiero ser contactado" con el comando /inicio.';
     }
@@ -238,19 +224,26 @@ bot.on('message', async (msg) => {
 async function enviarCorreo(datos) {
   const transporter = nodemailer.createTransport({
     service: 'gmail',
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS
-    }
+    auth: { user: SMTP_USER, pass: SMTP_PASS }
   });
 
   const mailOptions = {
     from: SMTP_USER,
     to: DESTINO_CONTACTO,
     subject: 'Nuevo mensaje de contacto desde el bot',
-    text: `Nombre: ${datos.nombre}\nRUT: ${datos.rut}\nCorreo: ${datos.correo}\nTeléfono: ${datos.telefono}\n¿Prefiere WhatsApp?: ${(datos.preferencia === 'sí' || datos.preferencia === 'si') ? 'Sí' : 'No'}\nMensaje: ${datos.mensaje}`
+    text: `Nombre: ${datos.nombre}\nRUT: ${datos.rut}\nCorreo: ${datos.correo}\nTeléfono: ${datos.telefono}\n¿Prefiere WhatsApp?: ${['sí', 'si'].includes(datos.preferencia) ? 'Sí' : 'No'}\nMensaje: ${datos.mensaje}`
   };
 
   await transporter.sendMail(mailOptions);
 }
 
+// Webhook handler
+app.post(`/bot${TELEGRAM_TOKEN}`, (req, res) => {
+  bot.processUpdate(req.body);
+  res.sendStatus(200);
+});
+
+// Para pruebas locales
+app.get('/', (req, res) => {
+  res.send('Bot activo con webhook');
+});
