@@ -88,6 +88,20 @@ bot.on('message', async (msg) => {
   const urls = filtrarUrlsPorConsulta(userText);
   const contexto = await obtenerContenidoDeSitio(urls);
 
+  const intencionContacto = [
+    'quiero inscribirme',
+    'quiero que me contacten',
+    'quiero hablar con una persona',
+    'me pueden llamar',
+    'quiero inscribirme ya',
+    'necesito ayuda para inscribirme'
+  ];
+
+  if (intencionContacto.some(frase => userText.toLowerCase().includes(frase))) {
+    await bot.sendMessage(chatId, '📬 Si deseas ser contactado personalmente, por favor comparte tu nombre completo, correo y teléfono para que podamos ayudarte. ¿Deseas continuar?');
+    return;
+  }
+
   try {
     const completion = await axios.post(
       'https://api.openai.com/v1/chat/completions',
