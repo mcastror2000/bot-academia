@@ -58,7 +58,7 @@ async function obtenerContenidoDeSitio(urls) {
       try {
         const { data } = await axios.get(url);
         const $ = cheerio.load(data);
-        const texto = $('main').text().replace(/\s+/g, ' ').trim().slice(0, 1500);
+        const texto = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 2000);
         textoTotal += `Contenido de ${url}:
 ` + texto + '\n\n';
       } catch (err) {
@@ -72,56 +72,23 @@ async function obtenerContenidoDeSitio(urls) {
   }
 }
 
-bot.on('new_chat_members', (msg) => {
-  const bienvenida = '👋 ¡Hola! Soy tu asistente virtual. Cuéntame qué cursos te interesan y te ayudaré con gusto. Si deseas que te contacten directamente, pulsa el botón a continuación.';
-  const chatId = msg.chat.id;
-  const opciones = {
-    reply_markup: {
-      inline_keyboard: [[{ text: '📬 Quiero ser contactado', callback_data: 'iniciar_contacto' }]]
-    }
-  };
-  bot.sendMessage(chatId, bienvenida, opciones);
-});
-
-bot.onText(/\/quiero_contacto/, (msg) => {
-  const chatId = msg.chat.id;
-  formulariosPendientes[chatId] = { paso: 'nombre' };
-  bot.sendMessage(chatId, 'Por favor, indícame tu nombre completo.');
-});
-
-bot.onText(/\/inicio/, (msg) => {
-  const chatId = msg.chat.id;
-  const opciones = {
-    reply_markup: {
-      inline_keyboard: [[{ text: '📬 Quiero ser contactado', callback_data: 'iniciar_contacto' }]]
-    }
-  };
-  bot.sendMessage(chatId, '¡Hola! ¿En qué puedo ayudarte hoy?', opciones);
-});
-
-bot.on('callback_query', async (callbackQuery) => {
-  const chatId = callbackQuery.message.chat.id;
-  if (callbackQuery.data === 'iniciar_contacto') {
-    formulariosPendientes[chatId] = { paso: 'nombre' };
-    bot.sendMessage(chatId, 'Perfecto. Comencemos con tu nombre completo.');
-  }
-});
-
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const userText = msg.text;
 
-  if (msg.text && !msg.text.startsWith('/') && !usuariosSaludados.has(chatId)) {
+  if (userText.startsWith('/')) return;
+
+  if (!usuariosSaludados.has(chatId)) {
     usuariosSaludados.add(chatId);
     const opciones = {
       reply_markup: {
-        inline_keyboard: [[{ text: '📬 Quiero ser contactado', callback_data: 'iniciar_contacto' }]]
+        inline_keyboard: [[
+          { text: '📬 Quiero ser contactado', callback_data: 'iniciar_contacto' }
+        ]]
       }
     };
     bot.sendMessage(chatId, '👋 ¡Hola! Soy tu asistente virtual. Cuéntame qué cursos te interesan y te ayudaré con gusto. Si deseas que te contacten directamente, pulsa el botón a continuación.', opciones);
   }
-
-  if (userText.startsWith('/')) return;
 
   if (formulariosPendientes[chatId]) {
     const datos = formulariosPendientes[chatId];
@@ -132,7 +99,8 @@ bot.on('message', async (msg) => {
         bot.sendMessage(chatId, 'Gracias. Ahora dime tu RUT.');
         break;
       case 'rut': {
-        if (!/^[0-9kK.\-]+$/.test(userText)) {
+        const rutValido = /^[0-9kK.\-]+$/.test(userText);
+        if (!rutValido) {
           bot.sendMessage(chatId, '⚠️ El RUT ingresado no parece válido. Intenta nuevamente.');
           return;
         }
@@ -142,7 +110,8 @@ bot.on('message', async (msg) => {
         break;
       }
       case 'correo': {
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userText)) {
+        const correoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userText);
+        if (!correoValido) {
           bot.sendMessage(chatId, '⚠️ El correo ingresado no parece válido. Intenta nuevamente.');
           return;
         }
@@ -152,7 +121,8 @@ bot.on('message', async (msg) => {
         break;
       }
       case 'telefono': {
-        if (!/^\d{7,15}$/.test(userText)) {
+        const telefonoValido = /^\d{7,15}$/.test(userText);
+        if (!telefonoValido) {
           bot.sendMessage(chatId, '⚠️ El número debe tener solo dígitos (mínimo 7, máximo 15). Intenta nuevamente.');
           return;
         }
@@ -163,7 +133,7 @@ bot.on('message', async (msg) => {
       }
       case 'preferencia': {
         const texto = userText.toLowerCase();
-        if (!['sí', 'si', 'no'].includes(texto)) {
+        if (texto !== 'sí' && texto !== 'no' && texto !== 'si') {
           bot.sendMessage(chatId, 'Por favor, responde solo "Sí" o "No".');
           return;
         }
@@ -209,7 +179,8 @@ bot.on('message', async (msg) => {
 
     let respuesta = completion.data.choices[0].message.content;
     const textoDetallado = userText.toLowerCase();
-    const deseaDetalles = ['precio', 'valor', 'horario', 'clase', 'inscripción'].some(p => textoDetallado.includes(p));
+    const deseaDetalles = textoDetallado.includes('precio') || textoDetallado.includes('valor') || textoDetallado.includes('horario') || textoDetallado.includes('clase') || textoDetallado.includes('inscripción');
+
     if (historialConsultas[chatId] >= 3 && deseaDetalles) {
       respuesta += '\n\n👉 Si deseas concretar tu participación o recibir más información personalizada, puedes completar el formulario de contacto con /quiero_contacto o pulsar "📬 Quiero ser contactado" con el comando /inicio.';
     }
@@ -221,29 +192,53 @@ bot.on('message', async (msg) => {
   }
 });
 
+bot.onText(/\/quiero_contacto/, (msg) => {
+  const chatId = msg.chat.id;
+  formulariosPendientes[chatId] = { paso: 'nombre' };
+  bot.sendMessage(chatId, 'Por favor, indícame tu nombre completo.');
+});
+
+bot.onText(/\/inicio/, (msg) => {
+  const chatId = msg.chat.id;
+  const opciones = {
+    reply_markup: {
+      inline_keyboard: [[
+        { text: '📬 Quiero ser contactado', callback_data: 'iniciar_contacto' }
+      ]]
+    }
+  };
+  bot.sendMessage(chatId, '¡Hola! ¿En qué puedo ayudarte hoy?', opciones);
+});
+
+bot.on('callback_query', async (callbackQuery) => {
+  const chatId = callbackQuery.message.chat.id;
+  const action = callbackQuery.data;
+  if (action === 'iniciar_contacto') {
+    formulariosPendientes[chatId] = { paso: 'nombre' };
+    bot.sendMessage(chatId, 'Perfecto. Comencemos con tu nombre completo.');
+  }
+});
+
 async function enviarCorreo(datos) {
   const transporter = nodemailer.createTransport({
     service: 'gmail',
-    auth: { user: SMTP_USER, pass: SMTP_PASS }
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASS
+    }
   });
 
   const mailOptions = {
     from: SMTP_USER,
     to: DESTINO_CONTACTO,
     subject: 'Nuevo mensaje de contacto desde el bot',
-    text: `Nombre: ${datos.nombre}\nRUT: ${datos.rut}\nCorreo: ${datos.correo}\nTeléfono: ${datos.telefono}\n¿Prefiere WhatsApp?: ${['sí', 'si'].includes(datos.preferencia) ? 'Sí' : 'No'}\nMensaje: ${datos.mensaje}`
+    text: `Nombre: ${datos.nombre}
+RUT: ${datos.rut}
+Correo: ${datos.correo}
+Teléfono: ${datos.telefono}
+¿Prefiere WhatsApp?: ${(datos.preferencia === 'sí' || datos.preferencia === 'si') ? 'Sí' : 'No'}
+Mensaje: ${datos.mensaje}`
   };
 
   await transporter.sendMail(mailOptions);
 }
-
-// Webhook handler
-app.post(`/bot${TELEGRAM_TOKEN}`, (req, res) => {
-  bot.processUpdate(req.body);
-  res.sendStatus(200);
-});
-
-// Para pruebas locales
-app.get('/', (req, res) => {
-  res.send('Bot activo con webhook');
-});
