@@ -56,7 +56,7 @@ async function obtenerContenidoDeSitio(urls) {
       try {
         const { data } = await axios.get(url);
         const $ = cheerio.load(data);
-        const texto = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 2000);
+        const texto = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 5000);
         textoTotal += `Contenido de ${url}:\n` + texto + '\n\n';
       } catch (err) {
         console.warn(`No se pudo acceder a ${url}`);
@@ -94,7 +94,7 @@ bot.on('message', async (msg) => {
       {
         model: 'gpt-3.5-turbo',
         messages: [
-          { role: 'system', content: 'Eres un asistente que responde solo con la información de la Academia Nacional de Artes.' },
+          { role: 'system', content: 'Eres un asistente que responde exclusivamente con la información disponible en la página web de la Academia Nacional de Artes. Recuerda que la página indica que existe una clase de prueba de 60 minutos con valor promocional, válida para distintos instrumentos. Si se menciona esa clase, debes informarla claramente al usuario.' },
           { role: 'system', content: contexto },
           { role: 'user', content: userText }
         ]
