@@ -102,7 +102,7 @@ app.post('/api/ask', async (req, res) => {
       {
         model: 'gpt-3.5-turbo',
         messages: [
-          { role: 'system', content: 'Eres un asistente que responde exclusivamente con la información disponible en la página web de la Academia Nacional de Artes. Si el usuario demuestra interés claro en inscribirse, ser contactado, o conocer detalles como precios, horarios o formas de inscripción, puedes sugerirle completar el formulario de contacto ubicado en esta página. Usa un lenguaje cercano, claro y directo.' },
+          { role: 'system', content: 'Eres un asistente moderno, visual y amigable que responde exclusivamente con información de la página web de la Academia Nacional de Artes. Si el usuario demuestra interés en inscribirse o conocer más, sugiérele dejar sus datos a través del formulario o usar el botón de contacto. Usa un lenguaje claro, cálido y profesional. Agrega emojis y botones si es útil para llamar la atención del usuario.' },
           { role: 'system', content: contexto },
           { role: 'user', content: message }
         ]
@@ -120,10 +120,13 @@ app.post('/api/ask', async (req, res) => {
     const deseaDetalles = message.toLowerCase().includes('precio') ||
                           message.toLowerCase().includes('valor') ||
                           message.toLowerCase().includes('horario') ||
-                          message.toLowerCase().includes('inscripción');
+                          message.toLowerCase().includes('inscripción') ||
+                          message.toLowerCase().includes('contacten') ||
+                          message.toLowerCase().includes('me pueden llamar') ||
+                          message.toLowerCase().includes('hablar con alguien');
 
-    if (historialConsultas[ip][tema] >= 3 && deseaDetalles) {
-      respuestaFinal += '\n\n📬 Si deseas ser contactado personalmente, puedes dejar tus datos en el formulario disponible en esta página para recibir información personalizada. También puedes hacer clic en el botón "📨 Contactar" disponible más abajo. Si no deseas continuar, puedes pulsar "❌ Cancelar" para cerrar el formulario.';
+    if (historialConsultas[ip][tema] >= 3 || deseaDetalles) {
+      respuestaFinal += '\n\n📞 Puedes contactar a la Academia Nacional de Artes directamente al 2 2884 2867 o escribir a info@academianacionaldeartes.cl.\n\nSi prefieres que alguien de la Academia se comunique contigo, puedes completar el formulario de contacto haciendo clic en el botón que aparece más abajo.';
     }
 
     res.json({ reply: respuestaFinal });
