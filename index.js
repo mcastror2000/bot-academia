@@ -53,7 +53,7 @@ function filtrarUrlsPorConsulta(userText) {
   if (lowerText.includes('francés') || lowerText.includes('frances')) return ['https://www.academianacionaldeartes.cl/cursos-de-frances'];
   return [
     'https://www.academianacionaldeartes.cl/cursos-de-musica',
-    'https://www.academianacionaldeartes.cl/clase-de-prueba',
+    
     'https://www.academianacionaldeartes.cl'
   ];
 }
@@ -65,7 +65,7 @@ async function obtenerContenidoDeSitio(urls) {
       try {
         const { data } = await axios.get(url);
         const $ = cheerio.load(data);
-        const texto = $('body').text().replace(/\s+/g, ' ').trim().slice(0, 5000);
+        const texto = $('body').text().replace(/\s+/g, ' ').trim();
         textoTotal += `Contenido de ${url}:
 ` + texto + '\n\n';
       } catch (err) {
@@ -107,7 +107,8 @@ app.post('/api/ask', async (req, res) => {
             role: 'system',
             content: `Eres un asistente virtual cálido, profesional y amigable que responde exclusivamente con la información real disponible en el sitio web de la Academia Nacional de Artes. \n\nCuando detectes que el usuario está interesado en un curso específico, entrega todos los detalles disponibles (tipo de clases, duración, modalidad, instrumentos, etc.) y, si hay información sobre precios, clases de prueba u horarios, debes mencionarla con claridad.\n\nCuando el usuario solicite información sobre contacto, inscripción o demuestre interés evidente (por ejemplo, pregunta por precios, duración o cómo inscribirse), sugiérele completar el formulario de contacto. No inventes información que no esté en el sitio.\n\nUsa un lenguaje cercano, claro y directo, con un toque humano. Puedes usar emojis para dar calidez a las respuestas, y motiva al usuario a seguir consultando si lo necesita.`
           },
-          { role: 'system', content: contexto },
+          { role: 'system', content: `A continuación se entrega información extraída del sitio oficial. Úsala para responder con precisión:\n\n${contexto}` },
+
           { role: 'user', content: message }
         ]
       },
